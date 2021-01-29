@@ -1,0 +1,30 @@
+version: "3.8"
+services:
+  rabbit:
+    image: rabbitmq:3
+    ports:
+      - 127.0.0.1:5672:5672
+  redis:
+    image: redis:6
+    ports:
+      - 127.0.0.1:6379:6379
+  postgres:
+    image: postgres:11
+    ports:
+      - 127.0.0.1:5432:5432
+    environment:
+      - POSTGRES_PASSWORD=postgres
+  fytdl-celery:
+    depends_on:
+      - redis
+      - postgres
+      - rabbit
+    image: fytdl:local
+    build:
+      context: .
+    command: ["celery"]
+    volumes:
+      - ./downloads:/var/run/fytdl/downloads
+    environment:
+      - REDIS_HOST=redis
+      - RABBIT_HOST=rabbit

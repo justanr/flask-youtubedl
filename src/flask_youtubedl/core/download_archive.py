@@ -2,10 +2,19 @@ import errno
 import io
 from abc import ABC, abstractmethod
 from collections import defaultdict
+from typing import Dict, MutableSet
 
-from youtubedl.utils import locked_file as ytdl_locked_file
+from youtube_dl.utils import locked_file
 
 ## eventually supply a sqlalchemy backed archive
+
+__all__ = (
+    "DownloadArchive",
+    "SetDownloadArchive",
+    "LockedFileDownloadArchive",
+    "UseArchiveMixin",
+)
+
 
 class DownloadArchive(ABC):
     @abstractmethod
@@ -16,35 +25,26 @@ class DownloadArchive(ABC):
     def exists(self, archive_name, vid):
         NotImplemented
 
-    @abstractmethod
-    def remove(self, archive_name, vid):
-        NotImplemented
-
 
 class SetDownloadArchive(DownloadArchive):
-    def __init__(self, archives=None):
-        self._archives = defaultdict(set)
+    def __init__(self, archives: Dict[str, Dict[str, MutableSet[str]]] = None):
+        self._archives = (
+            archives
+            if archives is not None
+            else defaultdict(SetDownloadArchive._archive_factory)
+        )
 
     def add(self, archive_name, vid):
-        self._archives[archive_name].add(vid)
+        (extractor, id) = vid.split(" ", 1)
+        self._archives[archive_name][extractor].add(id)
 
     def exists(self, archive_name, vid):
-        return vid in self._archives[archive_name]
+        (extractor, id) = vid.split(" ", 1)
+        return id in self._archives[archive_name][extractor]
 
-    def remove(self, archive_name, vid):
-        self._archives[archive_name].remove(vid)
-
-
-class _locked_file(ytdl_locked_file):
-    def __init__(self, filename, mode, encoding=None):
-        self.f = io.open(filename, mode, encoding=encoding)
-        self.mode = mode
-
-    def seek(self, destination):
-        self.f.seek(destination)
-
-    def truncate(self):
-        self.f.truncate()
+    @staticmethod
+    def _archive_factory():
+        return defaultdict(set)
 
 
 class LockedFileDownloadArchive(DownloadArchive):
@@ -63,17 +63,19 @@ class LockedFileDownloadArchive(DownloadArchive):
         with self._get_locked_file(archive_name, "a") as fh:
             fh.write(vid + "\n")
 
-    def remove(self, archive_name, vid):
-        with self._get_locked_file(archive_name, "r+") as fh:
-            lines = list(fh)
-            fh.seek(0)
-            for line in lines:
-                if line.strip() != vid:
-                    fh.write(line)
-            fh.truncate()
-
     def _get_locked_file(self, filename, mode, encoding="utf-8"):
         return locked_file(filename, mode, encoding)
+
+
+class RedisDownloadArchive(DownloadArchive):
+    def __init__(self, redis_conn):
+        self._conn = redis_conn
+
+    def add(self, archive_name, vid):
+        self._conn.sadd(archive_name, vid)
+
+    def exists(self, archive_name, vid):
+        return self._conn.sismember(archive_name, vid)
 
 
 class UseArchiveMixin:
@@ -84,6 +86,7 @@ class UseArchiveMixin:
     def in_download_archive(self, info_dict):
         archive = self.params.get("download_archive")
         if not archive:
+            print("No archive provided")
             return False
 
         vid = self._make_archive_id(info_dict)
@@ -92,6 +95,7 @@ class UseArchiveMixin:
     def record_download_archive(self, info_dict):
         archive = self.params.get("download_archive")
         if not archive:
+            print("No archive provided")
             return
 
         vid = self._make_archive_id(info_dict)
