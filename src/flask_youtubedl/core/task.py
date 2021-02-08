@@ -5,23 +5,20 @@ from typing import Callable, Dict
 from youtube_dl import YoutubeDL
 from youtube_dl.utils import YoutubeDLError
 
+from .configuration import OptionsFactory
 from .hook import YtdlHook
 from .logger import YtdlLogger
+from .ytdl_factory import YtdlFactory
 
 
 class DownloadTask:
     def __init__(
-        self,
-        url: str,
-        ytdl_factory: Callable[[Dict[str, str]], YoutubeDL],
-        options_factory: Callable[[], Dict[str, str]],
+        self, url: str, ytdl_factory: YtdlFactory, options_factory: OptionsFactory
     ):
         self._url = url
-        self._options_factory = (
-            options_factory if options_factory is not None else lambda: {}
-        )
+        self._options_factory = options_factory
         self._ytdl_factory = ytdl_factory
-        self._hook = YtdlHook(None)
+        self._hook = YtdlHook()
         self._stderr = StringIO()
         self._stdout = StringIO()
         self._ytdl = None
@@ -73,7 +70,6 @@ class DownloadTask:
         self._set_hook()
         self._options["noplaylist"] = False
         self._options["progress_with_new_line"] = True
-
 
     def _set_hook(self):
         hooks = self._options.get("progress_hooks")

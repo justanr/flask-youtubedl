@@ -1,23 +1,52 @@
+from abc import ABC, abstractmethod
 from collections import defaultdict
+from typing import Any
 from uuid import uuid4
 
 
-class YtdlHook:
-    def __init__(self, post_dispatch):
-        self.id = uuid4()
-        self.events = defaultdict(list)
+class AbstractYtdlHook(ABC):
+    def __init__(self):
         self._dispatch_map = {
             "downloading": self.downloading,
             "error": self.error,
-            "finished": self.finished
+            "finished": self.finished,
         }
+
+    def dispatch(self, event) -> Any:
+        _m = self._dispatch_map.get(event["status"], self.unknown)
+        return _m(event)
+
+    @abstractmethod
+    def downloading(self, event) -> Any:
+        NotImplemented
+
+    @abstractmethod
+    def error(self, event) -> Any:
+        NotImplemented
+
+    @abstractmethod
+    def finished(self, event) -> Any:
+        NotImplemented
+
+    @abstractmethod
+    def unknown(self, event) -> Any:
+        NotImplemented
+
+    def __call__(self, event):
+        self.dispatch(event)
+
+
+class YtdlHook(AbstractYtdlHook):
+    def __init__(self, post_dispatch=None):
+        super().__init__()
+        self.id = uuid4()
+        self.events = defaultdict(list)
         self._post_dispatch = post_dispatch
         self.info = None
         self.final_state = None
 
     def dispatch(self, event):
-        _m = self._dispatch_map.get(event["status"], self.unknown)
-        result = _m(event)
+        result = super().dispatch(event)
         self.final_state = event["status"]
         if result and self._post_dispatch:
             self._post_dispatch(result)

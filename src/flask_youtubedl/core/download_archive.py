@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from typing import Dict, MutableSet
 
+from redis import Redis
 from youtube_dl.utils import locked_file
 
 ## eventually supply a sqlalchemy backed archive
@@ -68,7 +69,7 @@ class LockedFileDownloadArchive(DownloadArchive):
 
 
 class RedisDownloadArchive(DownloadArchive):
-    def __init__(self, redis_conn):
+    def __init__(self, redis_conn: Redis):
         self._conn = redis_conn
 
     def add(self, archive_name, vid):
@@ -86,7 +87,6 @@ class UseArchiveMixin:
     def in_download_archive(self, info_dict):
         archive = self.params.get("download_archive")
         if not archive:
-            print("No archive provided")
             return False
 
         vid = self._make_archive_id(info_dict)
@@ -95,9 +95,19 @@ class UseArchiveMixin:
     def record_download_archive(self, info_dict):
         archive = self.params.get("download_archive")
         if not archive:
-            print("No archive provided")
             return
 
         vid = self._make_archive_id(info_dict)
         if vid:
             self._dl_archive.add(archive, vid)
+
+
+class DownloadArchiveFactory(ABC):
+    @abstractmethod
+    def get(self) -> DownloadArchive:
+        raise NotImplementedError()
+
+
+class LockedFileDownloadArchiveFactory(DownloadArchiveFactory):
+    def get(self) -> DownloadArchive:
+        return LockedFileDownloadArchive()

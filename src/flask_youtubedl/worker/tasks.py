@@ -10,40 +10,43 @@ from youtube_dl import YoutubeDL
 
 from ..core.configuration import YoutubeDlConfiguration, get_config_from_env
 from ..core.download_archive import RedisDownloadArchive, UseArchiveMixin
-from .task import DownloadTask
+from ..hook import AbstractYtdlHook
+from ..task import DownloadTask
 
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
 RABBIT_HOST = os.getenv("RABBIT_HOST", "localhost")
 
-app = Celery("tasks", backend=f"redis://{REDIS_HOST}", broker=f"pyamqp://guest@{RABBIT_HOST}")
+app = Celery(
+    "tasks", backend=f"redis://{REDIS_HOST}", broker=f"pyamqp://guest@{RABBIT_HOST}"
+)
+
+__all__ = ("download",)
 
 
 class Ytdl(UseArchiveMixin, YoutubeDL):
     pass
 
 
-class OptionsFixer:
-    def __init__(self, configuration: YoutubeDlConfiguration):
-        self._configuration = configuration
+class DatabaseHook(AbstractYtdlHook):
+    def __init__(self, dl_entry):
+        self._dl = dl_entry
+        super().__init__()
 
-    def fix_configs(self, video_options: Dict[str, str]) -> Dict[str, str]:
-        these_configs = video_options.copy()
-        outtmpl = these_configs.get("outtmpl")
+    def downloading(self, event):
+        # update DB w/ progress
+        pass
 
-        if not outtmpl:
-            outtmpl = self._configuration.default_output_template
+    def error(self, event):
+        # update DB w/ status failed && create log?
+        pass
 
-        if not  outtmpl.startswith("/"):
-            outtmpl = f"{self._configuration.base_download_path}/{outtmpl}"
+    def finished(self, event):
+        # update DB w/ status finished
+        pass
 
-        these_configs["outtmpl"] = outtmpl
-
-        these_configs.setdefault("download_archive", self._configuration.download_archive)
-
-        return these_configs
-
-    def __call__(self, video_options: Dict[str, str]) -> Dict[str, str]:
-        return self.fix_configs(video_options)
+    def unknown(self, event):
+        # drop it
+        pass
 
 
 def ytdl_factory(options):
@@ -53,8 +56,24 @@ def ytdl_factory(options):
 CONFIGURATION = get_config_from_env()
 FIXER = OptionsFixer(CONFIGURATION)
 
+
 @app.task(bind=True)
-def download(self, url, video_options: Dict[str, str] = None):
+def process_video_download(download_id: str) -> None:
+    dl = Download.query.where(Download.download_id == download_id).first()
+    if not dl:
+        # log error
+        return
+
+    options = json.loads(dl.options or "{}")
+
+    video_url = dl.video.webage_url
+
+    # get download info + video details from database
+    # invoke download(url, options)
+    pass
+
+
+def download(url, video_options: Dict[str, str] = None):
     options = make_options(video_options)
 
     dl_task = DownloadTask(url, ytdl_factory, lambda: FIXER(video_options))
@@ -67,7 +86,6 @@ def download(self, url, video_options: Dict[str, str] = None):
         downloads.delay()
     else:
         dl_task.run()
-        print(f"Got options: {repr(options)}")
         return dl_task._hook.final_state
 
 

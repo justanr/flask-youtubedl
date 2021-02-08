@@ -1,0 +1,2 @@
+class FlaskYoutubeDLException(Exception):
+    pass
