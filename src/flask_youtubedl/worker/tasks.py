@@ -1,76 +1,25 @@
-import os
-from collections import ChainMap
-from functools import partial
 from typing import Dict
-
-import redis
-from celery import Celery, group
+from celery import group
 from celery.exceptions import Reject
-from youtube_dl import YoutubeDL
+from ..extensions import celery
+from ..models import Download
+from sqlalchemy.orm import Session
 
-from ..core.configuration import YoutubeDlConfiguration, get_config_from_env
-from ..core.download_archive import RedisDownloadArchive, UseArchiveMixin
-from ..hook import AbstractYtdlHook
-from ..task import DownloadTask
+__all__ = ("process_video_download",)
 
-REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
-RABBIT_HOST = os.getenv("RABBIT_HOST", "localhost")
+import logging
+logger = logging.getLogger(__name__)
 
-app = Celery(
-    "tasks", backend=f"redis://{REDIS_HOST}", broker=f"pyamqp://guest@{RABBIT_HOST}"
-)
-
-__all__ = ("download",)
-
-
-class Ytdl(UseArchiveMixin, YoutubeDL):
-    pass
-
-
-class DatabaseHook(AbstractYtdlHook):
-    def __init__(self, dl_entry):
-        self._dl = dl_entry
-        super().__init__()
-
-    def downloading(self, event):
-        # update DB w/ progress
-        pass
-
-    def error(self, event):
-        # update DB w/ status failed && create log?
-        pass
-
-    def finished(self, event):
-        # update DB w/ status finished
-        pass
-
-    def unknown(self, event):
-        # drop it
-        pass
-
-
-def ytdl_factory(options):
-    return Ytdl(options, archive=RedisDownloadArchive(redis.Redis(host=REDIS_HOST)))
-
-
-CONFIGURATION = get_config_from_env()
-FIXER = OptionsFixer(CONFIGURATION)
-
-
-@app.task(bind=True)
-def process_video_download(download_id: str) -> None:
-    dl = Download.query.where(Download.download_id == download_id).first()
+@celery.task(bind=True)
+def process_video_download(self, download_id: str) -> None:
+    session = self.injector.get(Session)
+    print(repr(session))
+    dl = Download.query.filter(Download.download_id == download_id).first()
     if not dl:
-        # log error
+        print(f"No download record found for {download_id}")
         return
 
-    options = json.loads(dl.options or "{}")
-
-    video_url = dl.video.webage_url
-
-    # get download info + video details from database
-    # invoke download(url, options)
-    pass
+    print(f"Found download record {dl.download_id} for video {dl.video.name}")
 
 
 def download(url, video_options: Dict[str, str] = None):

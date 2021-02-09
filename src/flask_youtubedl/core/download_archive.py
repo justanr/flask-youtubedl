@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from typing import Dict, MutableSet
 
+from injector import ClassAssistedBuilder, inject
 from redis import Redis
 from youtube_dl.utils import locked_file
 
@@ -108,6 +109,18 @@ class DownloadArchiveFactory(ABC):
         raise NotImplementedError()
 
 
-class LockedFileDownloadArchiveFactory(DownloadArchiveFactory):
+class GenericeDownloadArchiveFactory(DownloadArchiveFactory):
+    def __init__(self, creator):
+        self._creator = creator
+
     def get(self) -> DownloadArchive:
-        return LockedFileDownloadArchive()
+        return self._creator
+
+
+class RedisDownloadArchiveFactory(DownloadArchiveFactory):
+    @inject
+    def __init__(self, redis_factory: ClassAssistedBuilder[Redis]) -> None:
+        self._redis_factory = redis_factory
+
+    def get(self) -> DownloadArchiveFactory:
+        return RedisDownloadArchive(self._redis_factory.build())

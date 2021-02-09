@@ -1,21 +1,28 @@
-from injector import provider, singleton
+from flask.config import Config
+from injector import Injector, provider, singleton
 from youtube_dl import YoutubeDL
 
-from ..core.configuration import (
-    OptionsFactory,
-    OptionsFixer,
-    YoutubeDlConfiguration,
-    get_config_from_env,
-)
+from ..core.configuration import OptionsFactory, OptionsFixer, YoutubeDlConfiguration
 from ..core.download_archive import (
+    DownloadArchive,
     DownloadArchiveFactory,
-    LockedFileDownloadArchiveFactory,
+    GenericeDownloadArchiveFactory,
+    LockedFileDownloadArchive,
+    RedisDownloadArchive,
+    RedisDownloadArchiveFactory,
+    SetDownloadArchive,
 )
 from ..core.ytdl_factory import ArchivalYoutubeDlFactory, YtdlFactory
 from ._helpers import FytdlModule
 
 
 class YoutubeDLModule(FytdlModule):
+    _ARCHIVE_PROVIDER_MAP = {
+        "file": lambda _: GenericeDownloadArchiveFactory(LockedFileDownloadArchive),
+        "set": lambda _: GenericeDownloadArchiveFactory(SetDownloadArchive),
+        "redis": lambda i: i.get(RedisDownloadArchiveFactory),
+    }
+
     def configure(self, binder):
         binder.bind(YtdlFactory, ArchivalYoutubeDlFactory)
         binder.bind(OptionsFactory, OptionsFixer)
@@ -26,12 +33,22 @@ class YoutubeDLModule(FytdlModule):
 
     @singleton
     @provider
-    def provide_ytdl_configuration(self) -> YoutubeDlConfiguration:
-        return get_config_from_env()
+    def provide_ytdl_configuration(self, app_config: Config) -> YoutubeDlConfiguration:
+        return app_config["YTDL"]
 
     @singleton
     @provider
-    def provide_file_archive(
-        self, config: YoutubeDlConfiguration
+    def provide_download_archive_factory(
+        self, config: Config, injector: Injector
     ) -> DownloadArchiveFactory:
-        return LockedFileDownloadArchiveFactory()
+        archive_provider_name = (config.get("ARCHIVE_PROVIDER") or "file").lower()
+        archive_provider = self._ARCHIVE_PROVIDER_MAP.get(
+            archive_provider_name, self._ARCHIVE_PROVIDER_MAP["file"]
+        )
+        return archive_provider(injector)
+
+    @provider
+    def provide_download_archive(
+        self, factory: DownloadArchiveFactory
+    ) -> DownloadArchive:
+        return factory.get()

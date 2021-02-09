@@ -10,6 +10,7 @@ from ..core.utils import store_video
 from ..models import Download, Video
 from ._helpers import FytdlBlueprint
 from .serialize import serialize_with
+from ..worker.tasks import process_video_download
 
 download = FytdlBlueprint("download", __name__, url_prefix="/download")
 
@@ -38,6 +39,7 @@ class DownloadView(MethodView):
             dl.video = video
             self._session.add(dl)
             self._session.commit()
+            process_video_download.delay(str(dl.download_id))
 
         return dl
 

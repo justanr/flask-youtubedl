@@ -1,7 +1,8 @@
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
-from typing import Callable, Dict
+from typing import Any, Callable, Dict
 
+from injector import inject
 from youtube_dl import YoutubeDL
 from youtube_dl.utils import YoutubeDLError
 
@@ -12,10 +13,16 @@ from .ytdl_factory import YtdlFactory
 
 
 class DownloadTask:
+    @inject
     def __init__(
-        self, url: str, ytdl_factory: YtdlFactory, options_factory: OptionsFactory
+        self,
+        url: str,
+        run_options: Dict[str, Any],
+        ytdl_factory: YtdlFactory,
+        options_factory: OptionsFactory,
     ):
         self._url = url
+        self._run_options = run_options
         self._options_factory = options_factory
         self._ytdl_factory = ytdl_factory
         self._hook = YtdlHook()
@@ -29,7 +36,7 @@ class DownloadTask:
         ytdl = self._ytdl
 
         if ytdl is None:
-            ytdl = self._ytdl = self._ytdl_factory(self.options)
+            ytdl = self._ytdl = self._ytdl_factory(**self.options)
 
         return ytdl
 
@@ -37,7 +44,7 @@ class DownloadTask:
     def options(self):
         options = self._options
         if options is None:
-            options = self._options = self._options_factory()
+            options = self._options = self._options_factory(self._run_options)
             self._intercept_options()
 
         return options

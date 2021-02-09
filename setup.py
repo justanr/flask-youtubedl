@@ -19,4 +19,8 @@ setup(
     ],
     license="MIT",
     zip_safe=False,
+    entry_points="""
+        [console_scripts]
+        fytdl=flask_youtubedl.cli:fytdl
+"""
 )

@@ -5,3 +5,7 @@ redis>=3.5.3<4.0.0
 flask-wtf>=0.14.3,<1.0.0
 flask-sqlalchemy>=2.4.4,<3.0.0
 marshmallow-annotations
+Flask-Injector==0.12.3
+injector==0.18.4
+psycopg2-binary>=2.8.6,<3.0.0
+redis>=3.5.0,<4.0.0

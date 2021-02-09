@@ -13,18 +13,24 @@ services:
     ports:
       - 127.0.0.1:5432:5432
     environment:
-      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=fytdl
+      - POSTGRES_USER=fytdl
+      - POSTGRES_PASSWORD=fytdl
   fytdl-celery:
     depends_on:
+      - rabbit
       - redis
       - postgres
-      - rabbit
     image: fytdl:local
     build:
       context: .
     command: ["celery"]
     volumes:
       - ./downloads:/var/run/fytdl/downloads
+      - ./fytdl.cfg:/var/run/fytdl/fytdl.cfg:ro
     environment:
-      - REDIS_HOST=redis
-      - RABBIT_HOST=rabbit
+      - FYTDL_SETTINGS="/var/run/fytdl/fytdl.cfg"
+      - FYTDL_REDIS_URL="redis://redis:6379"
+      - FYTDL_CELERY_BROKER_URL="pyamqp://guest@rabbit"
+      - FYTDL_CELERY_RESULTS_BACKEND="redis://redis:6379"
+      - FYTDL_SQLALCHEMY_DATABASE_URI="postgresql://fytdl:fytdl@postgres:5432/fytdl"
