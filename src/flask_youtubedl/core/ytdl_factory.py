@@ -1,9 +1,10 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from youtube_dl import YoutubeDL
 
 from .download_archive import DownloadArchiveFactory, UseArchiveMixin
+from .configuration import OptionsFactory
 from injector import inject
 
 class ArchivalYoutubeDl(UseArchiveMixin, YoutubeDL):
@@ -25,8 +26,11 @@ class YtdlFactory(ABC):
 
 class ArchivalYoutubeDlFactory(YtdlFactory):
     @inject
-    def __init__(self, archive_factory: DownloadArchiveFactory) -> None:
+    def __init__(self, archive_factory: DownloadArchiveFactory, options_factories: List[OptionsFactory]) -> None:
         self._archive_factory = archive_factory
+        self._options_factories = options_factories
 
     def get(self, **params: Dict[str, Any]) -> YoutubeDL:
+        for factory in self._options_factories:
+            factory.reconfigure(params)
         return ArchivalYoutubeDl(params, archive=self._archive_factory.get())

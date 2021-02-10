@@ -1,6 +1,8 @@
-from injector import ClassProvider
-from injector import ListOfProviders as _ListOfProviders
-from injector import Module, Provider
+from typing import List, Type, TypeVar
+
+from injector import ClassProvider, Injector, ListOfProviders, Module, Provider
+
+T = TypeVar("T")
 
 
 class FytdlModule(Module):
@@ -14,13 +16,13 @@ def _to_class_provider(cls):
     return cls
 
 
-class ListOfProviders(_ListOfProviders):
-    def __init__(self, classes=()):
+class ClassProviderList(ListOfProviders[T]):
+    def __init__(self, classes: List[Type[T]] = None):
         super().__init__()
-        for cls in classes:
-            self.append(cls)
 
+        if classes:
+            for cls in classes:
+                self.append(ClassProvider(cls))
 
-class ClassProviderList(ListOfProviders):
-    def __init__(self, classes=()):
-        super().__init__(_to_class_provider(c) for c in classes)
+    def get(self, injector: Injector) -> List[T]:
+        return [provider.get(injector) for provider in self._providers]

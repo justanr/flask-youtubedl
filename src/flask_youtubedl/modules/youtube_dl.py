@@ -2,7 +2,7 @@ import logging
 from typing import List
 
 from flask.config import Config
-from injector import Injector, provider, singleton
+from injector import Injector, provider, singleton, ClassProvider
 from youtube_dl import YoutubeDL
 
 from ..core.configuration import OptionsFactory, OptionsFixer, YoutubeDlConfiguration
@@ -16,7 +16,7 @@ from ..core.download_archive import (
     SetDownloadArchive,
 )
 from ..core.ytdl_factory import ArchivalYoutubeDlFactory, YtdlFactory
-from ._helpers import FytdlModule
+from ._helpers import FytdlModule, ClassProviderList
 
 logger = logging.getLogger(__name__)
 
@@ -31,11 +31,11 @@ class YoutubeDLModule(FytdlModule):
         binder.bind(YtdlFactory, ArchivalYoutubeDlFactory)
         binder.multibind(
             List[OptionsFactory],
-            to=[
+            to=ClassProviderList([
                 impl
                 for impl in OptionsFactory.__subclasses__()
                 if not getattr(impl, "__no_bind__", False)
-            ],
+            ]),
         )
 
     @provider
