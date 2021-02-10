@@ -1,16 +1,26 @@
+import logging
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, List
 
 from injector import inject
 from youtube_dl import YoutubeDL
 from youtube_dl.utils import YoutubeDLError
 
 from .configuration import OptionsFactory
-from .hook import YtdlHook
-from .logger import YtdlLogger
 from .ytdl_factory import YtdlFactory
 
+logger = logging.getLogger(__name__)
+
+
+class DownloadTaskOptionsFixer(OptionsFactory):
+    __no_bind__ = True
+
+    def reconfigure(self, video_options: Dict[str, Any]) -> Dict[str, Any]:
+        video_options["logger"] = logger
+        video_options["noplaylist"] = False
+        video_options["progress_with_new_line"] = True
+        video_options.setdefault("download_archive", "default_archive")
 
 class DownloadTask:
     @inject
@@ -19,15 +29,13 @@ class DownloadTask:
         url: str,
         run_options: Dict[str, Any],
         ytdl_factory: YtdlFactory,
-        options_factory: OptionsFactory,
+        options_factories: List[OptionsFactory],
     ):
         self._url = url
         self._run_options = run_options
-        self._options_factory = options_factory
+        self._options_factories = options_factories
+        self._options_factories.append(DownloadTaskOptionsFixer())
         self._ytdl_factory = ytdl_factory
-        self._hook = YtdlHook()
-        self._stderr = StringIO()
-        self._stdout = StringIO()
         self._ytdl = None
         self._options = None
 
@@ -44,46 +52,20 @@ class DownloadTask:
     def options(self):
         options = self._options
         if options is None:
-            options = self._options = self._options_factory(self._run_options)
-            self._intercept_options()
+            for fixer in self._options_factories:
+                fixer(self._run_options)
+
+            options = self._options = self._run_options
 
         return options
 
     def run(self):
-        self._reset_streams()
         with self.ytdl as ytdl:
-            self.extract_info()
             try:
                 ytdl.download([self._url])
             except (YoutubeDLError) as e:
-                self._hook.exception(e)
-
-        self._reset_streams()
-
-    def extract_info(self):
-        if self._hook.info is None:
-            self._hook.info = self.ytdl.extract_info(self._url, download=False)
-
-    @property
-    def info(self):
-        self.extract_info()
-        return self._hook.info
+                # ???
+                pass
 
     def is_playlist(self):
         return self.info.get("_type") == "playlist"
-
-    def _intercept_options(self):
-        self._options["logger"] = YtdlLogger
-        self._set_hook()
-        self._options["noplaylist"] = False
-        self._options["progress_with_new_line"] = True
-
-    def _set_hook(self):
-        hooks = self._options.get("progress_hooks")
-        hooks = [] if hooks is None else hooks
-        hooks.append(self._hook)
-        self._options["progress_hooks"] = hooks
-
-    def _reset_streams(self):
-        self._stderr.seek(0)
-        self._stdout.seek(0)

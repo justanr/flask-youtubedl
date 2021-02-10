@@ -1,3 +1,6 @@
+import logging
+from typing import List
+
 from flask.config import Config
 from injector import Injector, provider, singleton
 from youtube_dl import YoutubeDL
@@ -15,6 +18,7 @@ from ..core.download_archive import (
 from ..core.ytdl_factory import ArchivalYoutubeDlFactory, YtdlFactory
 from ._helpers import FytdlModule
 
+logger = logging.getLogger(__name__)
 
 class YoutubeDLModule(FytdlModule):
     _ARCHIVE_PROVIDER_MAP = {
@@ -25,7 +29,14 @@ class YoutubeDLModule(FytdlModule):
 
     def configure(self, binder):
         binder.bind(YtdlFactory, ArchivalYoutubeDlFactory)
-        binder.bind(OptionsFactory, OptionsFixer)
+        binder.multibind(
+            List[OptionsFactory],
+            to=[
+                impl
+                for impl in OptionsFactory.__subclasses__()
+                if not getattr(impl, "__no_bind__", False)
+            ],
+        )
 
     @provider
     def provide_youtubedl(self, factory: YtdlFactory) -> YoutubeDL:
@@ -45,6 +56,7 @@ class YoutubeDLModule(FytdlModule):
         archive_provider = self._ARCHIVE_PROVIDER_MAP.get(
             archive_provider_name, self._ARCHIVE_PROVIDER_MAP["file"]
         )
+        logger.info(f"Using archive provider: {archive_provider}")
         return archive_provider(injector)
 
     @provider

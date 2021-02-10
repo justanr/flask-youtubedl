@@ -1,6 +1,8 @@
 #!/bin/bash
 set -e
 
+fytdl create-db
+
 case $1 in
     celery)
         shift

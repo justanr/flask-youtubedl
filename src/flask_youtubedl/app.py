@@ -1,7 +1,11 @@
+import logging
+import logging.config
 import os
+import sys
 import typing as T
 from pathlib import Path
 
+from celery.signals import setup_logging
 from celery import Celery
 from flask import Flask
 from flask_injector import FlaskInjector
@@ -19,6 +23,7 @@ def make_app(
     app = Flask("flask-youtubedl", instance_path=instance_path)
     setup_instance_path(app)
     configure_app(app, config_path, envvar_prefixes)
+    configure_logging(app)
     configure_celery_app(app, extensions.celery)
     initialize_extensions(app)
     register_blueprints(app)
@@ -82,6 +87,43 @@ def configure_app(
         config.get_youtubedl_config_from_app_config(app.config, prefix, ytdl_config)
 
 
+def configure_logging(app: Flask) -> None:
+    log_level = "INFO"
+
+    if app.testing:
+        _configure_test_logging(app)
+
+    if app.debug:
+        log_level = "DEBUG"
+
+    config = {
+        "version": 1,
+        "filters": {"exclude_errors": {"()": "flask_youtubedl.logging.ExcludeErrorLogFilter"}},
+        "handlers": {
+            "stdout": {
+                "class": "logging.StreamHandler",
+                "level": log_level,
+                "stream": sys.stdout,
+                "filters": ["exclude_errors"],
+            },
+            "stderr": {
+                "class": "logging.StreamHandler",
+                "level": "ERROR",
+                "stream": sys.stderr,
+            },
+        },
+        "root": {"level": "NOTSET", "handlers": ["stdout", "stderr"]},
+    }
+
+    app.config["LOGGING_CONFIG"] = config
+
+    logging.config.dictConfig(config)
+
+
+def _configure_test_logging(app: Flask) -> None:
+    pass
+
+
 def configure_celery_app(app: Flask, celery: Celery) -> None:
     flat_celery_config = app.config.get_namespace("CELERY_")
     celery_ns = {}
@@ -107,6 +149,10 @@ def configure_celery_app(app: Flask, celery: Celery) -> None:
                 return super().__call__(*args, **kwargs)
 
     celery.Task = ContextTask
+
+    @setup_logging.connect
+    def configure_logging(*args, **kwargs):
+        logging.config.dictConfig(app.config["LOGGING_CONFIG"])
 
 
 def initialize_extensions(app: Flask) -> None:

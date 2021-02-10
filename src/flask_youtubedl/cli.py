@@ -109,3 +109,9 @@ def shell_command():
 @fytdl.command("show-config", add_help_option=False)
 def show_config():
     pprint(dict(current_app.config))
+
+
+@fytdl.command("create-db")
+@with_appcontext
+def create_db():
+    db.create_all()

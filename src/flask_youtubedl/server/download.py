@@ -1,5 +1,6 @@
 from uuid import uuid4
 
+from flask import abort
 from flask.views import MethodView
 from injector import inject
 from sqlalchemy.orm import Session
@@ -8,9 +9,9 @@ from youtube_dl import YoutubeDL
 from ..core.schema import DownloadSchema
 from ..core.utils import store_video
 from ..models import Download, Video
+from ..worker.tasks import process_video_download
 from ._helpers import FytdlBlueprint
 from .serialize import serialize_with
-from ..worker.tasks import process_video_download
 
 download = FytdlBlueprint("download", __name__, url_prefix="/download")
 
@@ -41,6 +42,17 @@ class DownloadView(MethodView):
             self._session.commit()
             process_video_download.delay(str(dl.download_id))
 
+        return dl
+
+    @serialize_with(schema=DownloadSchema)
+    def get(self, id: str):
+        dl = (
+            Download.query.join(Video, Download.video)
+            .filter(Video.video_id == id)
+            .first()
+        )
+        if not dl:
+            abort(404)
         return dl
 
 

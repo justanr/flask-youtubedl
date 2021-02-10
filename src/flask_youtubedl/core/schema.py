@@ -23,7 +23,7 @@ class VideoSchema(AnnotationSchema):
             playlists = {"exclude": ("videos",)}
 
 class DownloadSchema(AnnotationSchema):
-    attempts = ma_fields.List(ma_fields.Nested("DownloadSchema", exclude=("download", "download_id")))
+    attempts = ma_fields.List(ma_fields.Nested("DownloadAttemptsSchema", exclude=("download", "download_id")))
 
     class Meta:
         target = Download
