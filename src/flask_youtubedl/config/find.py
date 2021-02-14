@@ -21,6 +21,11 @@ class ConfigurationError(FlaskYoutubeDLException):
     pass
 
 
+def default_instance_path() -> Path:
+    here = _here()
+    return here.parent.parent.parent
+
+
 def config_from_path(app: Flask, path: T.Optional[CFG_PATH_TYPE]) -> T.Union[Path, object]:
     if path is None:
         return root_around(app, __DEFAULT_CONFIG_FILENAME)

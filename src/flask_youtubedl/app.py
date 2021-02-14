@@ -5,14 +5,13 @@ import sys
 import typing as T
 from pathlib import Path
 
-from celery.signals import setup_logging
 from celery import Celery
-from flask import Flask
+from celery.signals import setup_logging
+from flask import Blueprint, Flask
 from flask_injector import FlaskInjector
 
 from . import config, extensions, server
 from .modules import FytdlModule
-from .server import FytdlBlueprint
 
 
 def make_app(
@@ -20,6 +19,13 @@ def make_app(
     instance_path: T.Optional[config.CFG_PATH_TYPE],
     envvar_prefixes=(),
 ) -> Flask:
+
+    if instance_path is None:
+        instance_path = config.default_instance_path()
+
+    if isinstance(instance_path, Path):
+        instance_path = str(instance_path.absolute())
+
     app = Flask("flask-youtubedl", instance_path=instance_path)
     setup_instance_path(app)
     configure_app(app, config_path, envvar_prefixes)
@@ -84,7 +90,9 @@ def configure_app(
     ytdl_config = app.config["YTDL"] = config.YoutubeDlConfiguration()
 
     for prefix in sources["ENVVAR_PREFIXES"]:
-        config.get_youtubedl_config_from_app_config(app.config, prefix, ytdl_config)
+        config.get_youtubedl_config_from_app_config(
+            config=app.config, prefix=prefix, ytdl_config=ytdl_config
+        )
 
 
 def configure_logging(app: Flask) -> None:
@@ -98,7 +106,9 @@ def configure_logging(app: Flask) -> None:
 
     config = {
         "version": 1,
-        "filters": {"exclude_errors": {"()": "flask_youtubedl.logging.ExcludeErrorLogFilter"}},
+        "filters": {
+            "exclude_errors": {"()": "flask_youtubedl.logging.ExcludeErrorLogFilter"}
+        },
         "handlers": {
             "stdout": {
                 "class": "logging.StreamHandler",
@@ -160,11 +170,7 @@ def initialize_extensions(app: Flask) -> None:
 
 
 def register_blueprints(app: Flask) -> None:
-    bps = [
-        bp
-        for bp in server.blueprints.__dict__.values()
-        if isinstance(bp, FytdlBlueprint)
-    ]
+    bps = [bp for bp in server.views.__dict__.values() if isinstance(bp, Blueprint)]
 
     for bp in bps:
         app.register_blueprint(bp)

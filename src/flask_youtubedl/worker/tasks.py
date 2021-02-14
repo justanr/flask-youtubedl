@@ -10,7 +10,11 @@ from sqlalchemy.orm import Session
 from ..core.task import DownloadTask
 from ..extensions import celery
 from ..models import Download, DownloadAttempt
-from .hook import DownloadAttemptHook
+from .hook import (
+    DownloadAttemptHandleOnError,
+    DownloadAttemptHook,
+    TooManyFailedAttempts,
+)
 
 __all__ = ("process_video_download",)
 
@@ -20,10 +24,13 @@ logger = logging.getLogger(__name__)
 @celery.task(bind=True)
 def process_video_download(self, download_id: str) -> None:
     session = self.injector.get(Session)
+
     try:
         dl = Download.query.filter(Download.download_id == download_id).first()
     except Exception as e:
-        logger.exception(f"Unhandled exception while attempting to retrieve download {download_id}")
+        logger.exception(
+            f"Unhandled exception while attempting to retrieve download {download_id}"
+        )
 
     if not dl:
         logger.warn(f"No download record found for {download_id}")
@@ -38,61 +45,34 @@ def process_video_download(self, download_id: str) -> None:
         logger.error(msg)
         return
 
+    attempt = dl.latest_attempt
+
+    if not attempt or attempt.is_failed():
+        attempt = dl.start_new_attempt()
+        session.add(attempt)
+
     if dl.options:
         try:
             options = json.loads(dl.options)
         except Exception as e:
-            dl.block_further = True
-            dl.block_reason = "Could not decode provided options: {dl.options}"
+            dl.block(
+                "Could not decode provided options: {dl.options}",
+                when=datetime.utcnow(),
+                propagate_to_latest_attempt=True,
+            )
             session.commit()
             return
-
-    attempt = DownloadAttempt()
-    attempt.download = dl
-    session.add(attempt)
-    session.commit()
 
     progress_hooks = options.setdefault("progress_hooks", [])
     progress_hooks.append(DownloadAttemptHook(attempt, session))
     task_factory = self.injector.get(ClassAssistedBuilder[DownloadTask])
-    task = task_factory.build(url=dl.video.webpage_url, run_options=options)
-    try:
-        task.run()
-    except Exception as e:
-        logger.exception(
-            f"Unhandled exception while downloading {dl.video.webpage_url}"
-        )
-        attempt.status = "Error"
-        attempt.error = str(e)
+    task = task_factory.build(
+        url=dl.video.webpage_url,
+        run_options=options,
+        on_error=[DownloadAttemptHandleOnError(attempt), TooManyFailedAttempts(dl, 3)],
+    )
+
+    task.run()
 
     session.commit()
     session.close()
-
-
-def download(url, video_options: Dict[str, str] = None):
-    options = make_options(video_options)
-
-    dl_task = DownloadTask(url, ytdl_factory, lambda: FIXER(video_options))
-
-    looks_like_playlist = "playlist" in url
-
-    if dl_task.is_playlist():
-        videos = [v["webpage_url"] for v in dl_task.info["entries"]]
-        downloads = group(download.s(v, video_options) for v in videos)
-        downloads.delay()
-    else:
-        dl_task.run()
-        return dl_task._hook.final_state
-
-
-def make_options(video_options: Dict[str, str] = None):
-    default_options = {
-        "quiet": True,
-        "download_archive": "dlarchive",
-        "outtmpl": "%(title)s.%(ext)s",
-        "progress_hooks": [],
-    }
-
-    if video_options is not None:
-        default_options.update(video_options)
-    return default_options

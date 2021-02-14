@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 import logging
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
@@ -13,6 +14,9 @@ from .ytdl_factory import YtdlFactory
 logger = logging.getLogger(__name__)
 
 
+__all__ = ("DownloadTaskOptionsFixer", "DownloadTask", "DownloadTaskOnError")
+
+
 class DownloadTaskOptionsFixer(OptionsFactory):
     __no_bind__ = True
 
@@ -22,6 +26,8 @@ class DownloadTaskOptionsFixer(OptionsFactory):
         video_options["progress_with_new_line"] = True
         video_options.setdefault("download_archive", "default_archive")
 
+
+
 class DownloadTask:
     @inject
     def __init__(
@@ -30,9 +36,11 @@ class DownloadTask:
         run_options: Dict[str, Any],
         ytdl_factory: YtdlFactory,
         options_factories: List[OptionsFactory],
+        on_error: List[Callable[["DownloadTask", Exception], None]] = None,
     ):
         self._url = url
         self._run_options = run_options
+        self._on_error = on_error if on_error is not None else []
         self._options_factories = options_factories
         self._options_factories.append(DownloadTaskOptionsFixer())
         self._ytdl_factory = ytdl_factory
@@ -63,9 +71,23 @@ class DownloadTask:
         with self.ytdl as ytdl:
             try:
                 ytdl.download([self._url])
-            except (YoutubeDLError) as e:
+            except Exception as e:
                 # ???
-                pass
+                logger.exception("Unhandled exception while processing download")
+                for on_error in self._on_error:
+                    on_error(self, e)
 
-    def is_playlist(self):
-        return self.info.get("_type") == "playlist"
+
+
+class DownloadTaskOnError(ABC):
+    """
+    Called by DownloadTask when an unhandled exception happens during a
+    run of the download
+    """
+
+    @abstractmethod
+    def on_error(self, task: DownloadTask, exception: Exception) -> None:
+        NotImplemented
+
+    def __call__(self, task: DownloadTask, exception: Exception) -> None:
+        self.on_error(task, exception)

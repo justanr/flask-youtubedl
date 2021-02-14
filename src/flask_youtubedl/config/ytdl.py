@@ -23,9 +23,10 @@ def get_youtubedl_config_from_app_config(config, prefix="YTDL_", ytdl_config=Non
     normalized_prefix = prefix.lower()
     ytdl_config = ytdl_config or YoutubeDlConfiguration()
     raw_config = ytdl_config.__dict__
+    config_keys = {k for k in YoutubeDlConfiguration.__dict__.keys() if not k.startswith("_")}
 
     for k, v in _get_configs(config, normalized_prefix):
-        if k in raw_config:
+        if k in config_keys:
             raw_config[k] = v
 
     if not getattr(config, "default_output_template", None):

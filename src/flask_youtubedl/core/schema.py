@@ -1,7 +1,14 @@
 from marshmallow import fields as ma_fields
 from marshmallow_annotations import AnnotationSchema
 
-from ..models import Playlist, Video, Download, DownloadAttempt
+from ..models import (
+    Download,
+    DownloadAttempt,
+    Pagination,
+    PaginationData,
+    Playlist,
+    Video,
+)
 
 
 class PlaylistSchema(AnnotationSchema):
@@ -13,7 +20,9 @@ class PlaylistSchema(AnnotationSchema):
 
 
 class VideoSchema(AnnotationSchema):
-    downloads = ma_fields.List(ma_fields.Nested("DownloadSchema", exclude=("video", "video_id")))
+    downloads = ma_fields.List(
+        ma_fields.Nested("DownloadSchema", exclude=("video", "video_id"))
+    )
 
     class Meta:
         target = Video
@@ -22,8 +31,12 @@ class VideoSchema(AnnotationSchema):
         class Fields:
             playlists = {"exclude": ("videos",)}
 
+
 class DownloadSchema(AnnotationSchema):
-    attempts = ma_fields.List(ma_fields.Nested("DownloadAttemptsSchema", exclude=("download", "download_id")))
+    attempts = ma_fields.List(
+        ma_fields.Nested("DownloadAttemptsSchema", exclude=("download", "download_id"))
+    )
+    latest_attempt = ma_fields.Nested("DownloadAttemptsSchema", exclude=("download", "download_id"))
 
     class Meta:
         target = Download
@@ -32,10 +45,18 @@ class DownloadSchema(AnnotationSchema):
         class Fields:
             video = {"exclude": ("downloads",)}
 
+
 class DownloadAttemptsSchema(AnnotationSchema):
     class Meta:
         target = DownloadAttempt
         register_as_scheme = True
 
         class Fields:
-            download = {"exclude": ("attempts",)}
+            download = {"exclude": ("attempts", "latest_attempt")}
+
+
+class PaginationDataSchema(AnnotationSchema):
+    class Meta:
+        target = PaginationData
+        register_as_scheme = True
+

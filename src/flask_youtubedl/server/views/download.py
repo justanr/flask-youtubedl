@@ -6,12 +6,14 @@ from injector import inject
 from sqlalchemy.orm import Session
 from youtube_dl import YoutubeDL
 
-from ..core.schema import DownloadSchema
-from ..core.utils import store_video
-from ..models import Download, Video
-from ..worker.tasks import process_video_download
-from ._helpers import FytdlBlueprint
-from .serialize import serialize_with
+from ...core.schema import DownloadSchema
+from ...core.utils import store_video
+from ...models import Download, Video,DownloadAttempt
+from ...worker.tasks import process_video_download
+from ..helpers import FytdlBlueprint, serialize_with
+
+
+__all__ = ("DownloadView", "download")
 
 download = FytdlBlueprint("download", __name__, url_prefix="/download")
 
@@ -25,12 +27,18 @@ class DownloadView(MethodView):
     @serialize_with(schema=DownloadSchema)
     def post(self, id: str):
         dl = (
-            Download.query.join(Video, Download.video)
+            Download.query
+            .join(Video, Download.video)
+            .join(DownloadAttempt, Download.attempts)
             .filter(Video.video_id == id)
             .first()
         )
 
-        if dl is None or dl.status.lower() == "failed":
+        if dl and dl.block_further:
+            abort(403)
+
+
+        if dl is None:
             info = self._ytdl.extract_info(
                 f"https://www.youtube.com/watch?v={id}", download=False
             )
@@ -39,6 +47,10 @@ class DownloadView(MethodView):
             dl.download_id = str(uuid4())
             dl.video = video
             self._session.add(dl)
+
+        if not dl.latest_attempt or dl.latest_attempt.is_failed():
+            attempt = dl.start_new_attempt()
+            self._session.add(attempt)
             self._session.commit()
             process_video_download.delay(str(dl.download_id))
 

@@ -1,2 +1,2 @@
-from ._helpers import FytdlBlueprint
-from . import blueprints
+from .helpers import FytdlBlueprint
+from . import views
