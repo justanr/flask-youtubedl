@@ -22,7 +22,7 @@ class OptionsFixer(OptionsFactory):
         self._configuration = configuration
 
     def reconfigure(self, video_options: Dict[str, Any]) -> None:
-        outtmpl = video_options.get("outtmpl")
+        outtmpl = video_options.get("outtmpl", None)
 
         if not outtmpl:
             outtmpl = self._configuration.default_output_template

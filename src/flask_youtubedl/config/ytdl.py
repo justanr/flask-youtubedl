@@ -1,13 +1,8 @@
 from typing import Optional
+
 from youtube_dl.utils import DEFAULT_OUTTMPL
 
-try:
-    str.removeprefix
-    strip_prefix = str.removeprefix
-except AttributeError:
-
-    def strip_prefix(prefix: str, key: str) -> str:
-        return (key[len(prefix) :] if key.startswith(prefix) else key).lower()
+from .helpers import hydrate_config_from_app_config
 
 
 class YoutubeDlConfiguration:
@@ -16,27 +11,16 @@ class YoutubeDlConfiguration:
     default_output_template: str = DEFAULT_OUTTMPL
 
 
-def get_youtubedl_config_from_app_config(config, prefix="YTDL_", ytdl_config=None):
-    if not prefix:
-        raise Exception("Prefix not provided")
+def get_youtubedl_config_from_app_config(
+    config, prefix="YTDL_", ytdl_config: YoutubeDlConfiguration = None
+) -> YoutubeDlConfiguration:
+    ytdl_config = ytdl_config if ytdl_config is not None else YoutubeDlConfiguration()
 
-    normalized_prefix = prefix.lower()
-    ytdl_config = ytdl_config or YoutubeDlConfiguration()
-    raw_config = ytdl_config.__dict__
-    config_keys = {k for k in YoutubeDlConfiguration.__dict__.keys() if not k.startswith("_")}
+    hydrate_config_from_app_config(
+        app_config=config, this_config=ytdl_config, prefix=prefix
+    )
 
-    for k, v in _get_configs(config, normalized_prefix):
-        if k in config_keys:
-            raw_config[k] = v
-
-    if not getattr(config, "default_output_template", None):
+    if not getattr(ytdl_config, "default_output_template", None):
         ytdl_config.default_output_template = DEFAULT_OUTTMPL
 
     return ytdl_config
-
-
-def _get_configs(config, normalized_prefix):
-    for k, v in config.items():
-        lower_k = k.lower()
-        if lower_k.startswith(normalized_prefix):
-            yield (strip_prefix(normalized_prefix, lower_k)), v

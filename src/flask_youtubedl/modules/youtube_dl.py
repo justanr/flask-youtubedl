@@ -5,7 +5,8 @@ from flask.config import Config
 from injector import Injector, provider, singleton, ClassProvider
 from youtube_dl import YoutubeDL
 
-from ..core.configuration import OptionsFactory, OptionsFixer, YoutubeDlConfiguration
+from ..config import YoutubeDlConfiguration, DownloadTaskConfig
+from ..core.configuration import OptionsFactory, OptionsFixer
 from ..core.download_archive import (
     DownloadArchive,
     DownloadArchiveFactory,
@@ -46,6 +47,11 @@ class YoutubeDLModule(FytdlModule):
     @provider
     def provide_ytdl_configuration(self, app_config: Config) -> YoutubeDlConfiguration:
         return app_config["YTDL"]
+
+    @singleton
+    @provider
+    def provide_task_configuration(self, app_config: Config) -> DownloadTaskConfig:
+        return app_config["TASK"]
 
     @singleton
     @provider

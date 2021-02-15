@@ -69,6 +69,8 @@ class DownloadTask:
 
     def run(self):
         with self.ytdl as ytdl:
+            outtmpl = self.options.get("outtmpl", "")
+            logger.info(f"Download template: {outtmpl}")
             try:
                 ytdl.download([self._url])
             except Exception as e:

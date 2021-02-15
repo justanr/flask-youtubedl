@@ -94,7 +94,7 @@ def start_celery(ctx):
 def shell_command():
     banner = f"Python {sys.version} on {sys.platform}\nInstance Path {current_app.instance_path}"
 
-    ctx = {"db": db, "app": current_app, "injector": current_app.injector}
+    ctx = {"db": db, "app": current_app, "injector": current_app.injector, "task_runner": celery}
 
     startup = os.environ.get("PYTHONSTARTUP")
     if startup and os.path.is_file(startup):

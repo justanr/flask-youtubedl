@@ -94,6 +94,10 @@ def configure_app(
             config=app.config, prefix=prefix, ytdl_config=ytdl_config
         )
 
+    task_config = app.config["TASK"] = config.hydrate_config_from_app_config(
+        app_config=app.config, this_config=config.DownloadTaskConfig(), prefix="YTDL_"
+    )
+
 
 def configure_logging(app: Flask) -> None:
     log_level = "INFO"

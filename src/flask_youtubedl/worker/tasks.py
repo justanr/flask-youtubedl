@@ -2,6 +2,7 @@ import json
 import logging
 from typing import Dict
 
+from pathlib import Path
 from celery import group
 from celery.exceptions import Reject
 from injector import ClassAssistedBuilder
@@ -47,18 +48,20 @@ def process_video_download(self, download_id: str) -> None:
 
     attempt = dl.latest_attempt
 
-    if not attempt or attempt.is_failed():
+    if not attempt or attempt.is_failed() or attempt.is_canceled():
         attempt = dl.start_new_attempt()
         session.add(attempt)
 
-    if dl.options:
+    attempt.task_id = self.request.id
+    session.commit()
+
+    if attempt.options:
         try:
-            options = json.loads(dl.options)
+            options = json.loads(attempt.options)
         except Exception as e:
-            dl.block(
+            attempt.set_error(
                 "Could not decode provided options: {dl.options}",
                 when=datetime.utcnow(),
-                propagate_to_latest_attempt=True,
             )
             session.commit()
             return
@@ -76,3 +79,17 @@ def process_video_download(self, download_id: str) -> None:
 
     session.commit()
     session.close()
+
+@celery.task(bind=True)
+def cleanup_attempt(self, download_attempt_id: int):
+    session = self.injector.get(Session)
+    attempt = DownloadAttempt.query.get(download_attempt_id)
+
+    if not attempt:
+        return
+
+    if attempt.filename:
+        Path(attempt.filename).unlink(missing_ok=True)
+
+    if attempt.tmpfilename:
+        Path(attempt.tmpfilename).unlink(missing_ok=True)

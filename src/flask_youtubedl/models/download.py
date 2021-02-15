@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 from typing import Any, Dict, Optional
 
@@ -11,8 +12,6 @@ class Download(BaseModel, db.Model):
 
     # uuid -- store as string for prototyping
     download_id: str = db.Column(db.Text)
-    # json blob, just store as str for now, it won't be queried
-    options: str = db.Column(db.Text, default="{}")
     block_further: bool = db.Column(db.Boolean, default=False)
     block_reason: str = db.Column(db.Text, nullable=True)
 
@@ -29,6 +28,7 @@ class Download(BaseModel, db.Model):
     def start_new_attempt(self) -> "DownloadAttempt":
         attempt = DownloadAttempt()
         attempt.download = self
+        attempt.video = self.video
         return attempt
 
     def block(
@@ -43,6 +43,8 @@ class Download(BaseModel, db.Model):
 
 class DownloadAttempt(BaseModel, db.Model):
     __tablename__ = "download_attempts"
+    # json blob, just store as str for now, it won't be queried
+    options: str = db.Column(db.Text, default="{}")
     tmpfilename: str = db.Column(db.Text, nullable=True)
     filename: str = db.Column(db.Text, nullable=True)
     total_bytes: int = db.Column(db.BigInteger, nullable=True)
@@ -60,8 +62,15 @@ class DownloadAttempt(BaseModel, db.Model):
     message: str = db.Column(db.Text, nullable=True)
     download_id: int = db.Column(db.Integer, db.ForeignKey("downloads.id"))
     download: Download = db.relationship(
-        Download, backref=db.backref("attempts", lazy=True)
+        Download, backref=db.backref("attempts", lazy=False)
     )
+    video_id: int = db.Column(db.Integer, db.ForeignKey("videos.id"))
+    video: Video = db.relationship(Video)
+    task_id: str = db.Column(db.Text, nullable=True)
+
+    def set_options(self, options: Dict[str, Any]) -> None:
+        options = options if options is not None else {}
+        self.options = json.dumps(options)
 
     def is_failed(self) -> bool:
         return self.status.lower() == "error"
@@ -74,6 +83,13 @@ class DownloadAttempt(BaseModel, db.Model):
 
     def is_pending(self) -> bool:
         return self.status.lower() == "pending"
+
+    def is_canceled(self) -> bool:
+        return self.status.lower() == "canceled"
+
+    def set_canceled(self, when: datetime) -> None:
+        self.status = "Canceled"
+        self.message = f"Canceled at {when}"
 
     def set_error(self, error_message: str, when: datetime) -> None:
         self.status = "Error"

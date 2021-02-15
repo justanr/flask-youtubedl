@@ -1,4 +1,4 @@
-from marshmallow import fields as ma_fields
+from marshmallow import fields as ma_fields, post_load
 from marshmallow_annotations import AnnotationSchema
 
 from ..models import (
@@ -9,6 +9,7 @@ from ..models import (
     Playlist,
     Video,
 )
+from .ytdl_options import YtdlDownloadOptions
 
 
 class PlaylistSchema(AnnotationSchema):
@@ -33,10 +34,14 @@ class VideoSchema(AnnotationSchema):
 
 
 class DownloadSchema(AnnotationSchema):
+    _IGNORED_ATTEMPT_FILEDS = ("download", "download_id", "video", "video_id")
+
     attempts = ma_fields.List(
-        ma_fields.Nested("DownloadAttemptsSchema", exclude=("download", "download_id"))
+        ma_fields.Nested("DownloadAttemptSchema", exclude=_IGNORED_ATTEMPT_FILEDS)
     )
-    latest_attempt = ma_fields.Nested("DownloadAttemptsSchema", exclude=("download", "download_id"))
+    latest_attempt = ma_fields.Nested(
+        "DownloadAttemptSchema", exclude=_IGNORED_ATTEMPT_FILEDS
+    )
 
     class Meta:
         target = Download
@@ -46,13 +51,14 @@ class DownloadSchema(AnnotationSchema):
             video = {"exclude": ("downloads",)}
 
 
-class DownloadAttemptsSchema(AnnotationSchema):
+class DownloadAttemptSchema(AnnotationSchema):
     class Meta:
         target = DownloadAttempt
         register_as_scheme = True
 
         class Fields:
-            download = {"exclude": ("attempts", "latest_attempt")}
+            download = {"exclude": ("attempts", "latest_attempt", "video", "video_id")}
+            video = {"exclude": ("downloads",)}
 
 
 class PaginationDataSchema(AnnotationSchema):
@@ -60,3 +66,15 @@ class PaginationDataSchema(AnnotationSchema):
         target = PaginationData
         register_as_scheme = True
 
+
+class YtdlDownloadOptionsSchema(AnnotationSchema):
+    class Meta:
+        target = YtdlDownloadOptions
+        register_as_scheme = True
+
+    @post_load
+    def into_instance(self, data, **kwargs):
+        opts = YtdlDownloadOptions()
+        opts.download_archive = data["download_archive"]
+        opts.outtmpl = data["outtmpl"]
+        return opts

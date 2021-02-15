@@ -39,7 +39,8 @@ class DownloadAttemptHandleOnError(DownloadTaskOnError):
         self._attempt = attempt
 
     def on_error(self, task: DownloadTask, exception: Exception) -> None:
-        self._attempt.set_error(f"Unhandled exception: {exception.__class__.__name__} {exception}", datetime.utcnow())
+        if not self._attempt.is_canceled():
+            self._attempt.set_error(f"Unhandled exception: {exception.__class__.__name__} {exception}", datetime.utcnow())
 
 
 class TooManyFailedAttempts(DownloadTaskOnError):

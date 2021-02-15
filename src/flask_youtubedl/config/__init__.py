@@ -8,3 +8,5 @@ from .find import (
     get_qualname,
 )
 from .ytdl import YoutubeDlConfiguration, get_youtubedl_config_from_app_config
+from .helpers import hydrate_config_from_app_config
+from .task_config import DownloadTaskConfig
